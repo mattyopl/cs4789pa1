@@ -54,7 +54,10 @@ class InfiniteHorizon:
         '''
         # TODO 1
         # For each state, we want to calculate the V and package that into an array
-        V = Q[np.arange(len(pi)), pi] # iterating over the individual states (using np.array [which just lists out 0, ..., len(pi)-1], and pi [to get the action choice of the policy for the state])
+        # V = np.zeros((self.nStates))
+        # for s in range(self.nStates):  
+        #     V[s] = Q[s, pi[s]]
+        V = Q[np.arange(len(pi)), pi] # iterating over the individual states (using np.arrange [which just lists out 0, ..., len(pi)-1], and pi [to get the action choice of the policy for the state])
         return V
 
 
@@ -69,14 +72,15 @@ class InfiniteHorizon:
         Precondition: An array of |S| numbers
         '''
         # TODO 2
+
+        Q = (self.R + self.discount * self.P @ V).T # batches out the calculation into |A| batches of |S|x|S| times |S| -> |A|x|S| results.
         # Q = np.zeros((self.nStates, self.nActions)) 
 
         # for s in range(self.nStates):  # Iterate over states
         #     for a in range(self.nActions):  # Iterate over actions
-        #         expected_value = np.sum([self.P[s, a, s_prime] * V[s_prime] for s_prime in range(self.S)])  
+        #         expected_value = np.sum([self.P[a, s, s_prime] * V[s_prime] for s_prime in range(self.nStates)])  
 
         #         Q[s, a] = self.R[a, s] + self.discount * expected_value
-        Q = self.R + self.discount * self.P @ V # batches out the calculation into |A| batches of |S|x|S| times |S| -> |A|x|S| results.
 
         return Q
 
@@ -123,11 +127,25 @@ class InfiniteHorizon:
         '''
         # TODO 5
         Q_prime = np.zeros((self.nStates, self.nActions))
-        for s in range(self.nStates):
-            for a in range(self.nActions):
-                expected_value = np.sum(self.P[a, s, s_prime] * np.max(Q[s_prime]) for s_prime in range(self.nStates))
+
+        # # # Compute the maximum Q-values for each state
+        # max_Q = np.max(Q, axis=1)
+
+        # max_Q = max_Q[np.newaxis, np.newaxis, :]  # Shape: (1, 1, nStates). Resizing so shapes agree in the sum...
+
+
+        # e_v = np.sum(self.P * max_Q, axis=2) # Expected value. Summing over the 3rd axis (other two are absorbed)
+        # Q_prime = (self.R + self.discount * e_v).T # Taking transpose because Rep is |A|x|S| and we need |S|x|A|
+
+        for s in range(self.nStates):  # Iterate over states
+            for a in range(self.nActions):  # Iterate over actions
+                # Compute the expected value term
+                expected_value = np.sum(self.P[a, s, :] * np.max(Q, axis=1))  # Sum over s'
+                # Compute Q^{t+1}(s, a)
                 Q_prime[s, a] = self.R[a, s] + self.discount * expected_value
+
         return Q_prime
+
 
     def valueIteration(self, initialQ, tolerance=0.01):
         '''
@@ -154,11 +172,11 @@ class InfiniteHorizon:
         Q_t = initialQ
         while True:
             Q_t_1 = self.valueIterationStep(Q_t)
-            epsilon = np.linalg.norm(Q_t - Q_t_1, ord=np.inf)
+            epsilon = np.max(np.abs(Q_t - Q_t_1))  # Directly compute infinity norm
             Q_t = Q_t_1
+            iterId+=1
             if epsilon <= tolerance:
                 break
-            iterId+=1
             
         # Now we should have our Q_t that passes the threshold
         # We just need to return the policy, value func, num of iterations, and end epsilon
@@ -182,10 +200,12 @@ class InfiniteHorizon:
         # TODO 7
         p_pi = self.extractPpi(pi)
         r_pi = self.extractRpi(pi)
-        I = np.eye(self.nActions, self.nStates, self.nStates)
+        I = np.eye(self.nStates, self.nStates)
         # V = (I-gamma*Pi)^-1 R -> (I-gamma*Pi) * V = R -> Ax = b
-        v_pi = np.linalg.solve((I-self.discount*p_pi), r_pi)
-        return v_pi
+        A = I-self.discount*p_pi
+        v_pi = np.linalg.solve(A, r_pi)
+        return v_pi.T
+
 
 
     ### APPROXIMATE POLICY EVALUATION ###
@@ -203,7 +223,6 @@ class InfiniteHorizon:
         Precondition: Float >= 0 (default: 0.01)
         '''
         # TODO 8
-        #Placeholder, replace with your code. 
         V = np.zeros(self.nStates) # init v_pi_0 with 0s
         epsilon = np.inf
         n_iters = 0
@@ -212,11 +231,12 @@ class InfiniteHorizon:
         r_pi = self.extractRpi(pi)
 
         while(True):
-            V_t_1 = r_pi + self.discount * p_pi @ V
-            epsilon = np.linalg.norm(V - V_t_1, ord=2)
-            n_iters+=1
+            # V_t_1 = r_pi + self.discount * p_pi @ V
+            V_t_1 = r_pi + self.discount * np.dot(p_pi, V)
+            epsilon = np.max(np.abs(V_t_1 - V))
+            n_iters += 1
             V = V_t_1
-            if(epsilon<=tolerance):
+            if epsilon <= tolerance:
                 break
             
 
@@ -234,7 +254,12 @@ class InfiniteHorizon:
         Precondition: boolean
         '''
         # TODO 9
-        return np.zeros(self.nStates) #Placeholder, replace with your code. 
+        #  Performing one step of policy eval
+        V = self.exactPolicyEvaluation(pi) if exact else self.approxPolicyEvaluation(pi)[0]
+
+        pi = self.extractMaxPifromV(V)
+        # Now one step of policy improvement
+        return pi
 
     def policyIteration(self, initial_pi, exact):
         '''
@@ -260,6 +285,21 @@ class InfiniteHorizon:
         # TODO 10
         #Placeholder, replace with your code. 
         iterId = 0
-        pi = np.zeros(self.nStates)
+        pi = initial_pi
         V = np.zeros(self.nStates)
+
+        while True:
+            pi_t_1 = self.policyIterationStep(pi, exact)
+            same = np.array_equal(pi, pi_t_1)
+            pi = pi_t_1
+            iterId+=1
+            if(same):
+                break
+
+        # Now calculating the final value function for the policy...
+        if(exact):
+            V = self.exactPolicyEvaluation(pi)
+        else:
+            V = self.approxPolicyEvaluation(pi)
+        
         return pi, V, iterId
