@@ -1,0 +1,9 @@
+Metadata-Version: 2.2
+Name: cs4789-pa1
+Version: 0.0.1
+Requires-Python: >=3.10
+License-File: LICENSE
+Requires-Dist: numpy>=1.26.1
+Requires-Dist: matplotlib>=3.8.0
+Dynamic: requires-dist
+Dynamic: requires-python
