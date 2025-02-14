@@ -300,6 +300,6 @@ class InfiniteHorizon:
         if(exact):
             V = self.exactPolicyEvaluation(pi)
         else:
-            V = self.approxPolicyEvaluation(pi)
+            V, _, _ = self.approxPolicyEvaluation(pi)
         
         return pi, V, iterId
